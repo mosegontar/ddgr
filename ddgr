@@ -529,7 +529,6 @@ class DdgConnection(object):
         if r.status_code != 200:
             logerr('[%s] %s', r.status_code, r.reason)
             return None
-
         return r
 
 
@@ -1054,7 +1053,7 @@ class DdgCmd(object):
 
     def __init__(self, opts):
         super().__init__()
-
+        self.idx = 0
         self._opts = opts
 
         self._ddg_url = DdgUrl(opts)
@@ -1091,7 +1090,6 @@ class DdgCmd(object):
         """
         # This method also sets self._urltable.
         page = self._conn.fetch_page(self._ddg_url)
-
         if page is None:
             return
 
@@ -1106,13 +1104,14 @@ class DdgCmd(object):
         parser = DdgParser()
         parser.feed(page.text)
 
-        self.results = parser.results
+        self.results.extend(parser.results)
+
         self._urltable = {}
 
         for r in self.results:
             self._urltable.update(r.urltable())
 
-        self._ddg_url.update_num(len(self.results))
+        self._ddg_url.update_num(len(parser.results))
 
     @require_keywords
     def display_results(self, prelude='\n', json_output=False):
@@ -1134,8 +1133,16 @@ class DdgCmd(object):
                 print('No results.', file=sys.stderr)
             else:
                 sys.stderr.write(prelude)
-                for r in self.results:
+
+                for r in self.results[self.idx:self.idx+7]:
                     r.print()
+
+                if (self.idx + 7) > len(self.results):
+                    self.idx = len(self.results)
+                else:
+                    self.idx += 7
+                # for r in self.results:
+                #     r.print()
 
     @require_keywords
     def fetch_and_display(self, prelude='\n', json_output=False):
@@ -1216,6 +1223,7 @@ class DdgCmd(object):
         self.fetch_and_display()
 
     def do_ddg(self, arg):
+        self.__init__(self._opts)
         # Update keywords and reconstruct URL
         self._opts.keywords = arg
         self._ddg_url = DdgUrl(self._opts)
@@ -1229,8 +1237,11 @@ class DdgCmd(object):
     @no_argument
     def do_next(self):
         # If no results were fetched last time, we have hit the last page already
+
         if self._ddg_url._qrycnt == 0:
             print('No results.', file=sys.stderr)
+        elif self.idx < len(self.results):
+            self.display_results()
         else:
             self._ddg_url.next_page()
             self.fetch_and_display()
